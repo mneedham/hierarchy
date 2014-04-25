@@ -1,10 +1,8 @@
 package org.neo4j.hierarchy;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.neo4j.graphdb.Direction;
@@ -23,21 +21,23 @@ public class Hierarchy
     private static final String END_DATE = "endDate";
     private final GraphDatabaseService db;
 
-    public Hierarchy( GraphDatabaseService db ) {
+    public Hierarchy( GraphDatabaseService db )
+    {
         this.db = db;
         registerShutdownHook( db );
     }
 
     public static void main( String[] args )
     {
-        String path = "/Users/markneedham/test-bench/databases/023/neo4j-enterprise-2.0.1/data/graph.db/";
+        String path = "/Users/markneedham/projects/support/globoforce/neo4j-testbed";
 
         List<String> people = Arrays.asList( "814444" );
 
         Hierarchy hierarchy = new Hierarchy( new GraphDatabaseFactory().newEmbeddedDatabase( path ) );
         for ( String pkPerson : people )
         {
-            hierarchy.load( pkPerson );
+            Set<Pair<String, Integer>> result = hierarchy.load( pkPerson );
+            System.out.println(result.size());
         }
 
     }
@@ -57,160 +57,186 @@ public class Hierarchy
         } );
     }
 
-    public  void load( String pkPerson )
+    public Set<Pair<String, Integer>> load( String pkPerson )
     {
-        for ( int i = 0; i < 1; i++ )
+        Set<Pair<String, Integer>> result = new HashSet<>();
+
+        long start = System.currentTimeMillis();
+        try ( Transaction tx = db.beginTx() )
         {
-            Set<Pair<String, Integer>> result = new HashSet<>(  );
+            Node person = db.index().forNodes( PK_PERSON ).get( PK_PERSON, pkPerson ).getSingle();
 
-            long start = System.currentTimeMillis();
-            try(Transaction tx = db.beginTx()) {
-                Node person = db.index().forNodes( PK_PERSON ).get( PK_PERSON, pkPerson ).getSingle();
+            Iterable<Relationship> childRelationships = person.getRelationships( MANAGED_BY, Direction.INCOMING );
 
-                Iterable<Relationship> childRelationships = person.getRelationships( MANAGED_BY, Direction.INCOMING );
+            for ( Relationship childRelationship : childRelationships )
+            {
+                Node child = childRelationship.getStartNode();
 
-                for ( Relationship childRelationship : childRelationships )
+                if ( relationshipStillApplicable( childRelationship ) )
                 {
-                    Node child = childRelationship.getStartNode();
+                    result.add( Pair.of( pkPersonFor( child ), 4 ) );
+                }
 
-                    if( relationshipStillApplicable( childRelationship ) ) {
-                        result.add(Pair.of( pkPersonFor( child ), 4 ));
+                for ( Relationship grandChildRelationship : child.getRelationships( MANAGED_BY, Direction.INCOMING ) )
+                {
+                    Node grandChild = grandChildRelationship.getStartNode();
+
+                    if ( relationshipStillApplicable( grandChildRelationship ) )
+                    {
+                        result.add( Pair.of( pkPersonFor( grandChild ), 5 ) );
                     }
 
-                    for ( Relationship grandChildRelationship : child.getRelationships( MANAGED_BY, Direction.INCOMING ) )
+                    for ( Relationship greatGrandChildRelationshipRelationship : grandChild.getRelationships(
+                            MANAGED_BY, Direction.INCOMING ) )
                     {
-                        Node grandChild = grandChildRelationship.getStartNode();
+                        Node greatGrandChild = greatGrandChildRelationshipRelationship.getStartNode();
 
-                        if( relationshipStillApplicable( grandChildRelationship ) ) {
-                            result.add(Pair.of( pkPersonFor( grandChild ), 5 ));
+                        if ( relationshipStillApplicable( greatGrandChildRelationshipRelationship ) )
+                        {
+                            result.add( Pair.of( pkPersonFor( greatGrandChild ), 6 ) );
+                        }
+                    }
+                }
+            }
+
+            Iterable<Relationship> parentRelationships = person.getRelationships( MANAGED_BY, Direction.OUTGOING );
+
+            for ( Relationship parentRelationship : parentRelationships )
+            {
+                Node parent = parentRelationship.getEndNode();
+
+                if ( relationshipStillApplicable( parentRelationship ) )
+                {
+                    result.add( Pair.of( pkPersonFor( parent ), 4 ) );
+
+                    for ( Relationship otherChildRelationship : parent.getRelationships( MANAGED_BY,
+                            Direction.INCOMING ) )
+                    {
+                        Node otherChild = otherChildRelationship.getStartNode();
+
+                        if ( relationshipStillApplicable( otherChildRelationship ) && !otherChild.equals( person ) )
+                        {
+                            result.add( Pair.of( pkPersonFor( otherChild ), 7 ) );
                         }
 
-                        for ( Relationship greatGrandChildRelationshipRelationship : grandChild.getRelationships( MANAGED_BY, Direction.INCOMING ) )
+                        for ( Relationship otherGrandChildRelationship : otherChild.getRelationships( MANAGED_BY,
+                                Direction.INCOMING ) )
                         {
-                            Node greatGrandChild = greatGrandChildRelationshipRelationship.getStartNode();
-
-                            if( relationshipStillApplicable( greatGrandChildRelationshipRelationship ) ) {
-                                result.add(Pair.of( pkPersonFor( greatGrandChild ), 6 ));
+                            Node otherGrandChild = otherGrandChildRelationship.getStartNode();
+                            if ( relationshipStillApplicable( otherGrandChildRelationship ) && !otherGrandChild
+                                    .equals( person ) )
+                            {
+                                result.add( Pair.of( pkPersonFor( otherGrandChild ), 8 ) );
                             }
                         }
                     }
                 }
 
-                Iterable<Relationship> parentRelationships = person.getRelationships( MANAGED_BY, Direction.OUTGOING );
-
-                for ( Relationship parentRelationship : parentRelationships )
+                for ( Relationship grandParentRelationship : parent.getRelationships( MANAGED_BY, Direction.OUTGOING ) )
                 {
-                    Node parent = parentRelationship.getEndNode();
+                    Node grandParent = grandParentRelationship.getEndNode();
 
-                    if( relationshipStillApplicable( parentRelationship ) ) {
-                        result.add(Pair.of( pkPersonFor( parent ), 4));
-
-                        for ( Relationship otherChildRelationship : parent.getRelationships( MANAGED_BY, Direction.INCOMING ) )
-                        {
-                            Node otherChild = otherChildRelationship.getStartNode();
-
-                            if( relationshipStillApplicable( otherChildRelationship ) && !otherChild.equals( person )) {
-                                result.add(Pair.of( pkPersonFor( otherChild ), 7 ));
-                            }
-
-                            for ( Relationship otherGrandChildRelationship : otherChild.getRelationships( MANAGED_BY, Direction.INCOMING ) )
-                            {
-                                Node otherGrandChild = otherGrandChildRelationship.getStartNode();
-                                if( relationshipStillApplicable( otherGrandChildRelationship ) && !otherGrandChild.equals( person )) {
-                                    result.add(Pair.of( pkPersonFor( otherGrandChild ), 8 ));
-                                }
-                            }
-                        }
+                    if ( relationshipStillApplicable( grandParentRelationship ) )
+                    {
+                        result.add( Pair.of( pkPersonFor( grandParent ), 5 ) );
                     }
 
-                    for ( Relationship grandParentRelationship : parent.getRelationships( MANAGED_BY, Direction.OUTGOING ) )
+                    if ( relationshipStillApplicable( grandParentRelationship ) && relationshipStillApplicable(
+                            parentRelationship ) )
                     {
-                        Node grandParent = grandParentRelationship.getEndNode();
-
-                        if( relationshipStillApplicable( grandParentRelationship ) ) {
-                            result.add(Pair.of( pkPersonFor( grandParent ), 5));
-                        }
-
-                        if ( relationshipStillApplicable( grandParentRelationship ) && relationshipStillApplicable( parentRelationship ) )
+                        for ( Relationship familyLevel1Relationship : grandParent.getRelationships( MANAGED_BY,
+                                Direction.INCOMING ) )
                         {
-                            for ( Relationship familyLevel1Relationship : grandParent.getRelationships( MANAGED_BY, Direction.INCOMING ) )
+                            Node familyLevel1 = familyLevel1Relationship.getStartNode();
+
+                            if ( !familyLevel1.equals( parent ) )
                             {
-                                Node familyLevel1 = familyLevel1Relationship.getStartNode();
-
-                                if(!familyLevel1.equals( parent )) {
-                                    if( relationshipStillApplicable( familyLevel1Relationship ) && !managedBy( familyLevel1, parent ) )
-                                    {
-                                        result.add(Pair.of( pkPersonFor( familyLevel1 ), 9));
-                                    }
-
-                                    for ( Relationship familyLevel2Relationship : familyLevel1.getRelationships( MANAGED_BY, Direction.INCOMING ) )
-                                    {
-                                        Node familyLevel2 = familyLevel2Relationship.getStartNode();
-
-                                        if( relationshipStillApplicable( familyLevel2Relationship ) && !managedBy( familyLevel2, parent ) )
-                                        {
-                                            result.add(Pair.of( pkPersonFor( familyLevel2 ), 10));
-                                        }
-
-                                        for ( Relationship familyLevel3Relationship : familyLevel2.getRelationships( MANAGED_BY, Direction.INCOMING ) )
-                                        {
-                                            Node familyLevel3 = familyLevel3Relationship.getStartNode();
-
-                                            if( relationshipStillApplicable( familyLevel3Relationship ) && !managedBy( familyLevel3, parent ) )
-                                            {
-                                                result.add(Pair.of( pkPersonFor( familyLevel3 ), 11));
-                                            }
-
-                                            for ( Relationship familyLevel4Relationship : familyLevel3.getRelationships( MANAGED_BY, Direction.INCOMING ) )
-                                            {
-                                                Node familyLevel4 = familyLevel4Relationship.getStartNode();
-
-                                                if( relationshipStillApplicable( familyLevel4Relationship ) && !managedBy( familyLevel4, parent ) )
-                                                {
-                                                    String pk = pkPersonFor( familyLevel4 );
-//                                                        System.out.println("(" + pk + ")-[:MANAGED_BY]->(" + pkPersonFor( familyLevel3 ) + ")-[:MANAGED_BY]->(" + pkPersonFor( familyLevel2 ) + ")-[:MANAGED_BY]->(" + pkPersonFor( familyLevel1 ) + ")-[:MANAGED_BY]->(" + pkPersonFor(grandParent) + ")<-[:MANAGED_BY]-(" + pkPersonFor(parent) + ")<-[:MANAGED_BY]-(" + pkPersonFor( person ) + ")");
-                                                    result.add(Pair.of( pk, 12));
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                }
-
-                            }
-                        }
-
-
-                        for ( Relationship greatGrandParentRelationship : grandParent.getRelationships( MANAGED_BY, Direction.OUTGOING ) )
-                        {
-                            Node greatGrandParent = greatGrandParentRelationship.getEndNode();
-
-                            if( relationshipStillApplicable( greatGrandParentRelationship ) ) {
-                                result.add(Pair.of( pkPersonFor( greatGrandParent ), 6));
-
-                                for ( Relationship secondCousin1Relationship : greatGrandParent.getRelationships(  MANAGED_BY, Direction.INCOMING ) )
+                                if ( relationshipStillApplicable( familyLevel1Relationship ) && !managedBy(
+                                        familyLevel1, parent ) )
                                 {
-                                    Node secondCousin1 = secondCousin1Relationship.getStartNode();
-                                    if( relationshipStillApplicable( secondCousin1Relationship ) && !managedByAtLevel2(secondCousin1, grandParent))
+                                    result.add( Pair.of( pkPersonFor( familyLevel1 ), 9 ) );
+                                }
+
+                                for ( Relationship familyLevel2Relationship : familyLevel1.getRelationships(
+                                        MANAGED_BY, Direction.INCOMING ) )
+                                {
+                                    Node familyLevel2 = familyLevel2Relationship.getStartNode();
+
+                                    if ( relationshipStillApplicable( familyLevel2Relationship ) && !managedBy(
+                                            familyLevel2, parent ) )
                                     {
-                                        result.add(Pair.of( pkPersonFor( secondCousin1 ), 13));
+                                        result.add( Pair.of( pkPersonFor( familyLevel2 ), 10 ) );
                                     }
 
-                                    for ( Relationship secondCousin2Relationship : secondCousin1.getRelationships(  MANAGED_BY, Direction.INCOMING ) )
+                                    for ( Relationship familyLevel3Relationship : familyLevel2.getRelationships(
+                                            MANAGED_BY, Direction.INCOMING ) )
                                     {
-                                        Node secondCousin2 = secondCousin2Relationship.getStartNode();
-                                        if( relationshipStillApplicable( secondCousin2Relationship ) && !managedByAtLevel2(secondCousin2, grandParent))
+                                        Node familyLevel3 = familyLevel3Relationship.getStartNode();
+
+                                        if ( relationshipStillApplicable( familyLevel3Relationship ) && !managedBy(
+                                                familyLevel3, parent ) )
                                         {
-                                            result.add(Pair.of( pkPersonFor( secondCousin2 ), 13));
+                                            result.add( Pair.of( pkPersonFor( familyLevel3 ), 11 ) );
                                         }
 
-                                        for ( Relationship secondCousin3Relationship : secondCousin2.getRelationships(  MANAGED_BY, Direction.INCOMING ) )
+                                        for ( Relationship familyLevel4Relationship : familyLevel3.getRelationships(
+                                                MANAGED_BY, Direction.INCOMING ) )
                                         {
-                                            Node secondCousin3 = secondCousin3Relationship.getStartNode();
-                                            if( relationshipStillApplicable( secondCousin3Relationship ) && !managedByAtLevel2(secondCousin3, grandParent))
+                                            Node familyLevel4 = familyLevel4Relationship.getStartNode();
+
+                                            if ( relationshipStillApplicable( familyLevel4Relationship ) &&
+                                                    !managedBy( familyLevel4, parent ) )
                                             {
-                                                result.add(Pair.of( pkPersonFor( secondCousin3 ), 13));
+                                                String pk = pkPersonFor( familyLevel4 );
+                                                result.add( Pair.of( pk, 12 ) );
                                             }
+                                        }
+                                    }
+                                }
+
+                            }
+
+                        }
+                    }
+
+
+                    for ( Relationship greatGrandParentRelationship : grandParent.getRelationships( MANAGED_BY,
+                            Direction.OUTGOING ) )
+                    {
+                        Node greatGrandParent = greatGrandParentRelationship.getEndNode();
+
+                        if ( relationshipStillApplicable( greatGrandParentRelationship ) )
+                        {
+                            result.add( Pair.of( pkPersonFor( greatGrandParent ), 6 ) );
+
+                            for ( Relationship secondCousin1Relationship : greatGrandParent.getRelationships(
+                                    MANAGED_BY, Direction.INCOMING ) )
+                            {
+                                Node secondCousin1 = secondCousin1Relationship.getStartNode();
+                                if ( relationshipStillApplicable( secondCousin1Relationship ) && !managedByAtLevel2(
+                                        secondCousin1, grandParent ) )
+                                {
+                                    result.add( Pair.of( pkPersonFor( secondCousin1 ), 13 ) );
+                                }
+
+                                for ( Relationship secondCousin2Relationship : secondCousin1.getRelationships(
+                                        MANAGED_BY, Direction.INCOMING ) )
+                                {
+                                    Node secondCousin2 = secondCousin2Relationship.getStartNode();
+                                    if ( relationshipStillApplicable( secondCousin2Relationship ) &&
+                                            !managedByAtLevel2( secondCousin2, grandParent ) )
+                                    {
+                                        result.add( Pair.of( pkPersonFor( secondCousin2 ), 13 ) );
+                                    }
+
+                                    for ( Relationship secondCousin3Relationship : secondCousin2.getRelationships(
+                                            MANAGED_BY, Direction.INCOMING ) )
+                                    {
+                                        Node secondCousin3 = secondCousin3Relationship.getStartNode();
+                                        if ( relationshipStillApplicable( secondCousin3Relationship ) &&
+                                                !managedByAtLevel2( secondCousin3, grandParent ) )
+                                        {
+                                            result.add( Pair.of( pkPersonFor( secondCousin3 ), 13 ) );
                                         }
                                     }
                                 }
@@ -219,42 +245,10 @@ public class Hierarchy
                     }
                 }
             }
-
-            long end = System.currentTimeMillis();
-
-            System.out.println(pkPerson + ":" + i + " => " + (end - start));
-
-            Map<Integer, Integer> counts = new HashMap<>();
-            for ( Pair<String, Integer> row : result )
-            {
-//                    System.out.println(row);
-                if(!counts.containsKey( row.other() )) {
-                    counts.put( row.other(), 0 );
-                }
-
-                counts.put( row.other(), counts.get( row.other() ) + 1 );
-            }
-
-            int count = 0;
-            for ( Map.Entry<Integer, Integer> row : counts.entrySet() )
-            {
-                count = count + row.getValue() ;
-            }
-
-            Set<String> values = new HashSet<>();
-            for ( Pair<String, Integer> row : result )
-            {
-                values.add( row.first() );
-            }
-
-//                for ( String value : values )
-//                {
-//                    System.out.println(value);
-//                }
-
-
-            System.out.println(counts);
         }
+
+        return result;
+
     }
 
     private static String pkPersonFor( Node child )
@@ -275,7 +269,8 @@ public class Hierarchy
                     Direction.OUTGOING ) )
             {
                 Node potentialGrandParent = subRelationship.getEndNode();
-                if(potentialGrandParent.equals( grandParent )) {
+                if ( potentialGrandParent.equals( grandParent ) )
+                {
                     return true;
                 }
             }
@@ -288,7 +283,8 @@ public class Hierarchy
         for ( Relationship relationship : familyLevel1.getRelationships( MANAGED_BY, Direction.OUTGOING ) )
         {
             Node potentialParent = relationship.getEndNode();
-            if(potentialParent.equals(parent)) {
+            if ( potentialParent.equals( parent ) )
+            {
                 return true;
             }
         }

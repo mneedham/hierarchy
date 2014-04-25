@@ -7,6 +7,9 @@ import javax.ws.rs.core.MediaType;
 
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.config.DefaultClientConfig;
+import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -23,8 +26,10 @@ public class HierarchyTest
     {
         server = CommunityServerBuilder
                 .server()
+                .persistent()
                 .onPort( 7520 )
                 .withThirdPartyJaxRsPackage( "org.neo4j.hierarchy", "/extensions" )
+                .usingDatabaseDir( "/Users/markneedham/projects/support/globoforce/neo4j-testbed" )
                 .build();
 
         server.start();
@@ -38,7 +43,9 @@ public class HierarchyTest
     @Test
     public void should() throws IOException
     {
-        Client client = Client.create();
+        DefaultClientConfig defaultClientConfig = new DefaultClientConfig();
+        defaultClientConfig.getClasses().add(JacksonJsonProvider.class);
+        Client client = Client.create(defaultClientConfig);
 
         ClientResponse response = client
                 .resource( URI.create( "http://localhost:7520/extensions/hierarchy/814444" ) )
@@ -46,7 +53,9 @@ public class HierarchyTest
                 .get( ClientResponse.class );
 
         System.out.println(response);
-        System.out.println(response.getEntity( String.class ));
+        JsonNode json = response.getEntity( JsonNode.class );
+
+        System.out.println( json );
 
     }
 }
